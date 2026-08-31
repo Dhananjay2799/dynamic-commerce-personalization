@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: personalization-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: personalization
+      POSTGRES_USER: personalization
+      POSTGRES_PASSWORD: personalization_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - personalization_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U personalization -d personalization"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:8-alpine
+    container_name: personalization-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - personalization_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  personalization_postgres_data:
+  personalization_redis_data:
