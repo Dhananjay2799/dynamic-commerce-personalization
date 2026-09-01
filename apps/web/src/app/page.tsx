@@ -1,69 +1,861 @@
-import Image from "next/image";
+"use client";
+
+import {
+  useCallback,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
+
+import {
+  ArrowDown,
+  Search,
+  Sparkles,
+} from "lucide-react";
+
+import {
+  CategoryNav,
+} from "@/components/commerce/category-nav";
+
+import {
+  ProductDetail,
+} from "@/components/commerce/product-detail";
+
+import {
+  ProductGrid,
+} from "@/components/commerce/product-grid";
+
+import {
+  SearchBar,
+} from "@/components/commerce/search-bar";
+
+import {
+  CartDrawer,
+} from "@/components/commerce/cart-drawer";
+
+import {
+  IntentInspector,
+} from "@/components/debug/intent-inspector";
+
+import {
+  RecommendationRail,
+} from "@/components/recommendations/recommendation-rail";
+
+import {
+  useCategories,
+  useProducts,
+} from "@/hooks/use-products";
+
+import {
+  useRecommendations,
+  useSessionIntent,
+} from "@/hooks/use-recommendations";
+
+import {
+  useTelemetry,
+} from "@/hooks/use-telemetry";
+
+import {
+  useCart,
+} from "@/hooks/use-cart";
+
+import type {
+  CartItem,
+} from "@/hooks/use-cart";
+
+import type {
+  Product,
+} from "@/types/commerce";
+
+function getDebugModeSnapshot(): boolean {
+  if (
+    typeof window ===
+    "undefined"
+  ) {
+    return false;
+  }
+
+  const params =
+    new URLSearchParams(
+      window.location.search
+    );
+
+  return (
+    params.get("debug") ===
+    "true"
+  );
+}
+
+function getServerDebugModeSnapshot(): boolean {
+  return false;
+}
+
+function subscribeToUrl(
+  callback: () => void
+): () => void {
+  if (
+    typeof window ===
+    "undefined"
+  ) {
+    return () => {};
+  }
+
+  window.addEventListener(
+    "popstate",
+    callback
+  );
+
+  return () => {
+    window.removeEventListener(
+      "popstate",
+      callback
+    );
+  };
+}
 
 export default function Home() {
+  const [
+    selectedCategory,
+    setSelectedCategory,
+  ] = useState("");
+
+  const [
+    lastSignal,
+    setLastSignal,
+  ] = useState<
+    string | null
+  >(null);
+
+  const [
+    activeProduct,
+    setActiveProduct,
+  ] = useState<Product | null>(
+    null
+  );
+
+  const [
+    cartOpen,
+    setCartOpen,
+  ] = useState(false);
+
+  const {
+    items: cartItems,
+    itemCount,
+    subtotal,
+    addItem,
+    removeOne,
+    removeItem,
+  } = useCart();
+
+  const [
+    searchInput,
+    setSearchInput,
+  ] = useState("");
+
+  const [
+    searchQuery,
+    setSearchQuery,
+  ] = useState("");
+
+  const debugMode =
+    useSyncExternalStore(
+      subscribeToUrl,
+      getDebugModeSnapshot,
+      getServerDebugModeSnapshot
+    );
+
+  const {
+    sessionId,
+    trackEvent,
+  } = useTelemetry();
+
+  const handleProductImpression =
+    useCallback(
+      async (
+        product: Product,
+        surface: string
+      ) => {
+        await trackEvent(
+          {
+            event_type:
+              "product_impression",
+
+            product_id:
+              product.product_id,
+
+            category_id:
+              product.category_id,
+
+            metadata: {
+              surface:
+                searchQuery
+                  ? "search_results"
+                  : surface,
+
+              search_query:
+                searchQuery
+                  || null,
+
+              brand:
+                product.brand,
+
+              category:
+                product.category_code,
+            },
+          },
+          {
+            refreshRecommendations:
+              false,
+          }
+        );
+      },
+      [
+        trackEvent,
+        searchQuery,
+      ]
+    );
+
+  const productsQuery =
+    useProducts(
+      selectedCategory,
+      searchQuery
+    );
+
+  const categoriesQuery =
+    useCategories();
+
+  const recommendationsQuery =
+    useRecommendations(
+      sessionId,
+      12
+    );
+
+  const intentQuery =
+    useSessionIntent(
+      sessionId
+    );
+
+  const products =
+    productsQuery.data
+      ?.items ?? [];
+
+  const categories =
+    categoriesQuery.data ??
+    [];
+
+  const totalProducts =
+    useMemo(
+      () =>
+        productsQuery.data
+          ?.total ?? 0,
+      [
+        productsQuery.data,
+      ]
+    );
+
+  async function handleSearch() {
+    const normalizedQuery =
+      searchInput
+        .trim()
+        .replace(
+          /\s+/g,
+          " "
+        );
+
+    if (!normalizedQuery) {
+      setSearchQuery("");
+
+      return;
+    }
+
+    setSearchInput(
+      normalizedQuery
+    );
+
+    setSearchQuery(
+      normalizedQuery
+    );
+
+    setLastSignal(
+      `Search intent: ${normalizedQuery}`
+    );
+
+    await trackEvent(
+      {
+        event_type:
+          "search",
+
+        metadata: {
+          query:
+            normalizedQuery,
+
+          query_length:
+            normalizedQuery.length,
+
+          surface:
+            "storefront_search",
+        },
+      },
+      {
+        refreshRecommendations:
+          false,
+      }
+    );
+  }
+
+  function handleClearSearch() {
+    setSearchInput("");
+    setSearchQuery("");
+
+    setLastSignal(
+      "Search cleared"
+    );
+  }
+
+  async function handleRemoveOne(
+    item: CartItem
+  ) {
+    removeOne(
+      item.product
+        .product_id
+    );
+
+    setLastSignal(
+      `Removed one ${item.product.name}`
+    );
+
+    await trackEvent({
+      event_type:
+        "remove_from_cart",
+
+      product_id:
+        item.product
+          .product_id,
+
+      category_id:
+        item.product
+          .category_id,
+
+      metadata: {
+        surface:
+          "cart_drawer",
+
+        quantity_removed:
+          1,
+
+        remaining_quantity:
+          Math.max(
+            0,
+            item.quantity
+            - 1
+          ),
+      },
+    });
+  }
+
+  async function handleRemoveAll(
+    item: CartItem
+  ) {
+    removeItem(
+      item.product
+        .product_id
+    );
+
+    setLastSignal(
+      `Removed ${item.product.name} from bag`
+    );
+
+    for (
+      let index = 0;
+      index < item.quantity;
+      index += 1
+    ) {
+      await trackEvent(
+        {
+          event_type:
+            "remove_from_cart",
+
+          product_id:
+            item.product
+              .product_id,
+
+          category_id:
+            item.product
+              .category_id,
+
+          metadata: {
+            surface:
+              "cart_drawer",
+
+            quantity_removed:
+              1,
+
+            bulk_remove:
+              item.quantity
+              > 1,
+          },
+        },
+        {
+          refreshRecommendations:
+            index
+            ===
+            item.quantity
+            - 1,
+        }
+      );
+    }
+  }
+
+  async function handleProductSelect(
+    product: Product
+  ) {
+    setActiveProduct(
+      product
+    );
+
+    setLastSignal(
+      `Viewed ${product.name}`
+    );
+
+    await trackEvent({
+      event_type:
+        "product_click",
+
+      product_id:
+        product.product_id,
+
+      category_id:
+        product.category_id,
+
+      metadata: {
+        surface:
+          searchQuery
+            ? "search_results"
+            : "storefront",
+
+        search_query:
+          searchQuery
+            || null,
+
+        brand:
+          product.brand,
+
+        category:
+          product.category_code,
+      },
+    });
+  }
+
+  async function handleAddToCart(
+    product: Product
+  ) {
+    addItem(
+      product
+    );
+
+    setCartOpen(
+      true
+    );
+
+    setLastSignal(
+      `Added ${product.name} to bag`
+    );
+
+    await trackEvent({
+      event_type:
+        "add_to_cart",
+
+      product_id:
+        product.product_id,
+
+      category_id:
+        product.category_id,
+
+      metadata: {
+        surface:
+          activeProduct
+            ?.product_id
+          ===
+          product.product_id
+            ? "product_detail"
+            : searchQuery
+              ? "search_results"
+              : "storefront",
+
+        brand:
+          product.brand,
+
+        category:
+          product.category_code,
+      },
+    });
+  }
+
+  async function handleCategoryChange(
+    category: string
+  ) {
+    setSelectedCategory(
+      category
+    );
+
+    if (!category) {
+      return;
+    }
+
+    const categoryRecord =
+      categories.find(
+        (item) =>
+          item.category_l1 ===
+          category
+      );
+
+    await trackEvent({
+      event_type:
+        "category_view",
+
+      category_id:
+        categoryRecord
+          ?.category_id,
+
+      metadata: {
+        category,
+      },
+    });
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
+    <main className="commerce-page">
+      <header className="site-header">
+        <a
+          className="brand"
+          href="#top"
+        >
+          PERSONA
+        </a>
+
+        <nav className="header-nav">
+          <a href="#recommendations">
+            For You
+          </a>
+
+          <a href="#explore">
+            Explore
+          </a>
+        </nav>
+
+        <div className="header-actions">
+          <button
+            type="button"
+            aria-label="Search"
+          >
+            <Search
+              size={18}
+              strokeWidth={1.5}
+            />
+          </button>
+
+          <button
+            type="button"
+            className="header-bag-button"
+            onClick={() =>
+              setCartOpen(
+                true
+              )
+            }
+          >
+            BAG
+            <span>
+              {itemCount}
+            </span>
+          </button>
+        </div>
+      </header>
+
+      <section
+        className="hero"
+        id="top"
+      >
+        <div className="hero-index">
+          <span>
+            00 / COMMERCE
+          </span>
+
+          <span>
+            ML-POWERED
+          </span>
+        </div>
+
+        <div className="hero-copy">
+          <div className="hero-kicker">
+            <Sparkles
+              size={14}
+              strokeWidth={1.5}
+            />
+
+            <span>
+              ADAPTIVE
+              SHOPPING
+            </span>
+          </div>
+
+          <h1>
+            COMMERCE,
+            <br />
+
+            <span>
+              ADAPTED
+            </span>
+
+            <br />
+
+            TO YOU.
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+
+          <p>
+            A storefront that
+            learns from every
+            interaction and
+            re-ranks products
+            around your current
+            intent.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
+
+        <div className="hero-bottom">
+          <a href="#explore">
+            EXPLORE
+            <ArrowDown
+              size={17}
             />
-            Deploy Now
           </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+          <div>
+            <span>
+              MODEL
+            </span>
+
+            <strong>
+              session-svd-v2
+            </strong>
+          </div>
         </div>
-      </main>
-    </div>
+      </section>
+
+      <RecommendationRail
+        data={
+          recommendationsQuery.data
+        }
+        isLoading={
+          recommendationsQuery
+            .isLoading
+        }
+        onSelect={
+          handleProductSelect
+        }
+        onAddToCart={
+          handleAddToCart
+        }
+        onImpression={
+          handleProductImpression
+        }
+      />
+
+      <section
+        className="explore-section"
+        id="explore"
+      >
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">
+              02 / DISCOVER
+            </span>
+
+            <h2>
+              Explore
+              <br />
+              the catalog.
+            </h2>
+          </div>
+
+          <div className="catalog-stat">
+            <strong>
+              {totalProducts.toLocaleString()}
+            </strong>
+
+            <span>
+              PRODUCTS
+            </span>
+          </div>
+        </div>
+
+        {searchQuery && (
+          <div className="search-context">
+            <span>
+              SEARCH RESULTS
+            </span>
+
+            <h3>
+              “{searchQuery}”
+            </h3>
+
+            <p>
+              {productsQuery
+                .data
+                ?.total
+                .toLocaleString()
+                ?? 0}
+              {" "}
+              matching products
+            </p>
+          </div>
+        )}
+
+        <SearchBar
+          value={
+            searchInput
+          }
+          resultCount={
+            searchQuery
+              ? productsQuery
+                  .data
+                  ?.total
+              : undefined
+          }
+          isSearching={
+            productsQuery
+              .isFetching
+            &&
+            Boolean(
+              searchQuery
+            )
+          }
+          onChange={
+            setSearchInput
+          }
+          onSubmit={
+            handleSearch
+          }
+          onClear={
+            handleClearSearch
+          }
+        />
+
+        <CategoryNav
+          categories={categories}
+          selectedCategory={
+            selectedCategory
+          }
+          onChange={
+            handleCategoryChange
+          }
+        />
+
+        <ProductGrid
+          products={products}
+          isLoading={
+            productsQuery.isLoading
+          }
+          onSelect={
+            handleProductSelect
+          }
+          onAddToCart={
+            handleAddToCart
+          }
+          onImpression={
+            handleProductImpression
+          }
+        />
+      </section>
+
+      <footer className="site-footer">
+        <div>
+          <span>
+            REAL-TIME
+            PERSONALIZATION
+          </span>
+
+          <span>
+            FASTAPI / REDIS /
+            SVD / NEXT.JS
+          </span>
+        </div>
+
+        <strong>
+          PERSONA
+        </strong>
+      </footer>
+
+      {lastSignal && (
+        <div
+          className="signal-toast"
+          role="status"
+        >
+          <span className="toast-dot" />
+
+          {lastSignal}
+
+          <span>
+            INTENT UPDATED
+          </span>
+        </div>
+      )}
+
+      {activeProduct && (
+        <ProductDetail
+          key={
+            activeProduct
+              .product_id
+          }
+          product={
+            activeProduct
+          }
+          onClose={() =>
+            setActiveProduct(
+              null
+            )
+          }
+          onAddToCart={
+            handleAddToCart
+          }
+          trackEvent={
+            trackEvent
+          }
+        />
+      )}
+
+      <CartDrawer
+        open={
+          cartOpen
+        }
+        items={
+          cartItems
+        }
+        subtotal={
+          subtotal
+        }
+        onClose={() =>
+          setCartOpen(
+            false
+          )
+        }
+        onRemoveOne={
+          handleRemoveOne
+        }
+        onRemoveAll={
+          handleRemoveAll
+        }
+      />
+
+      {debugMode && (
+        <IntentInspector
+          intent={
+            intentQuery.data
+          }
+          recommendations={
+            recommendationsQuery.data
+          }
+        />
+      )}
+    </main>
   );
 }

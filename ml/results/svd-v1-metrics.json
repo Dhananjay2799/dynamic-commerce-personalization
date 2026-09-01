@@ -1,0 +1,34 @@
+{
+  "model_version": "svd-v1",
+  "split": {
+    "strategy": "latest-item temporal holdout",
+    "evaluation_users": 9971,
+    "seed": 42
+  },
+  "training": {
+    "users": 58122,
+    "products": 23435,
+    "nonzero_interactions": 387182,
+    "components": 64,
+    "explained_variance_ratio": 0.229366272687912
+  },
+  "popularity": {
+    "recall_at_10": 0.08404372680774246,
+    "hit_rate_at_10": 0.08404372680774246,
+    "ndcg_at_10": 0.046336867513690254,
+    "mrr_at_10": 0.03483968588271066,
+    "coverage_at_10": 0.0011521228931085981,
+    "evaluated_users": 9971,
+    "hits": 838
+  },
+  "svd": {
+    "recall_at_10": 0.11563534249323036,
+    "hit_rate_at_10": 0.11563534249323036,
+    "ndcg_at_10": 0.06933856886134053,
+    "mrr_at_10": 0.05508578050950932,
+    "coverage_at_10": 0.02560273095796885,
+    "evaluated_users": 9971,
+    "hits": 1153
+  },
+  "elapsed_seconds": 5.681784599961247
+}
