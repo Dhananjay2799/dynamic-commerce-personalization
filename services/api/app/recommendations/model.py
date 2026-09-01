@@ -17,7 +17,7 @@ class RankedCandidate:
 
 
 class RecommendationModel:
-    MODEL_VERSION = "session-svd-v2"
+    MODEL_VERSION = "session-svd-v3"
 
     def __init__(
         self,
@@ -28,12 +28,10 @@ class RecommendationModel:
             / "product_ids.npy"
         )
 
-        # IMPORTANT:
-        # Use the RAW TruncatedSVD item factors.
-        #
-        # These correspond to components_.T from training
-        # and preserve the magnitude information used by
-        # the offline reconstruction model.
+        # Use the raw TruncatedSVD item
+        # factors so online inference follows
+        # the same reconstruction geometry as
+        # the offline model.
         self.item_factors = np.load(
             artifacts_dir
             / "item_factors.npy"
@@ -91,7 +89,8 @@ class RecommendationModel:
         )
 
         denominator = (
-            maximum - minimum
+            maximum
+            - minimum
         )
 
         if denominator <= 0:
@@ -139,7 +138,8 @@ class RecommendationModel:
         )
 
         denominator = (
-            maximum - minimum
+            maximum
+            - minimum
         )
 
         if denominator <= 0:
@@ -157,16 +157,19 @@ class RecommendationModel:
 
     def build_session_factor(
         self,
-        product_weights: dict[int, float],
+        product_weights: dict[
+            int,
+            float,
+        ],
     ) -> np.ndarray | None:
         """
-        Project live session interactions into the
-        same latent space used during offline SVD
-        evaluation.
+        Project live product interactions
+        into the latent space learned by the
+        offline SVD model.
 
-        Training used log1p aggregated implicit
-        interaction strengths, so the online session
-        applies the same compression.
+        Offline training uses log1p implicit
+        strengths, so online inference uses
+        the same compression.
         """
 
         session_factor = np.zeros(
@@ -217,8 +220,13 @@ class RecommendationModel:
 
     def recommend(
         self,
-        product_weights: dict[int, float],
+        product_weights: dict[
+            int,
+            float,
+        ],
         limit: int,
+        candidate_product_ids:
+            set[int] | None = None,
     ) -> tuple[
         str,
         list[RankedCandidate],
@@ -233,6 +241,11 @@ class RecommendationModel:
             product_weights
         )
 
+        has_category_context = (
+            candidate_product_ids
+            is not None
+        )
+
         if session_factor is None:
             strategy = "popularity"
 
@@ -241,19 +254,17 @@ class RecommendationModel:
             )
 
             reason = (
+                "Popular in your current "
+                "category"
+                if has_category_context
+                else
                 "Popular with shoppers"
             )
-
         else:
-            strategy = "session_intent"
+            strategy = (
+                "session_intent"
+            )
 
-            # Same reconstruction geometry used by
-            # the offline SVD model:
-            #
-            # session latent factor
-            #       @
-            # item latent factors.T
-            #
             latent_scores = (
                 self.item_factors
                 @ session_factor
@@ -265,9 +276,9 @@ class RecommendationModel:
                 )
             )
 
-            # Keep popularity only as a small prior.
-            #
-            # Personalization remains dominant.
+            # Personalization remains
+            # dominant. Popularity is only a
+            # small stabilizing prior.
             scores = (
                 0.95
                 * latent_scores
@@ -277,10 +288,17 @@ class RecommendationModel:
             )
 
             reason = (
+                "Based on your session "
+                "and category intent"
+                if has_category_context
+                else
                 "Based on your current "
                 "session intent"
             )
 
+        # Products already represented by
+        # active product intent should not be
+        # recommended back to the shopper.
         for product_id in (
             seen_product_ids
         ):
@@ -292,6 +310,51 @@ class RecommendationModel:
 
             if index is not None:
                 scores[index] = -np.inf
+
+        # Explicit category browsing acts as
+        # contextual candidate selection.
+        #
+        # SVD still determines ordering inside
+        # the active category; this does not
+        # replace ML ranking with a database
+        # sort.
+        if (
+            candidate_product_ids
+            is not None
+        ):
+            allowed_indices = [
+                self.product_to_index[
+                    product_id
+                ]
+                for product_id
+                in candidate_product_ids
+                if product_id
+                in self.product_to_index
+            ]
+
+            filtered_scores = (
+                np.full_like(
+                    scores,
+                    -np.inf,
+                    dtype=np.float32,
+                )
+            )
+
+            if allowed_indices:
+                allowed_array = (
+                    np.asarray(
+                        allowed_indices,
+                        dtype=np.int64,
+                    )
+                )
+
+                filtered_scores[
+                    allowed_array
+                ] = scores[
+                    allowed_array
+                ]
+
+            scores = filtered_scores
 
         valid_count = int(
             np.isfinite(
@@ -329,9 +392,13 @@ class RecommendationModel:
             ]
         )
 
-        results = []
+        results: list[
+            RankedCandidate
+        ] = []
 
-        for index in candidate_indices:
+        for index in (
+            candidate_indices
+        ):
             results.append(
                 RankedCandidate(
                     product_id=int(
@@ -340,7 +407,9 @@ class RecommendationModel:
                         ]
                     ),
                     score=float(
-                        scores[index]
+                        scores[
+                            index
+                        ]
                     ),
                     reason=reason,
                 )
@@ -357,6 +426,7 @@ def get_recommendation_model(
 ) -> RecommendationModel:
     return RecommendationModel(
         artifacts_dir=(
-            settings.model_artifacts_dir
+            settings
+            .model_artifacts_dir
         )
     )

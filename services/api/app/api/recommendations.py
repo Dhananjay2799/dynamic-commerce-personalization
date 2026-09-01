@@ -5,13 +5,19 @@ from fastapi import (
     Depends,
     Query,
 )
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import (
+    func,
+    select,
+)
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+)
 
 from app.core.database import get_db
 from app.models.product import Product
 from app.recommendations.intent import (
     build_product_weights,
+    get_active_category,
 )
 from app.recommendations.model import (
     get_recommendation_model,
@@ -62,18 +68,57 @@ async def recommendations(
         )
     )
 
+    active_category = (
+        get_active_category(
+            events
+        )
+    )
+
+    category_product_ids: (
+        set[int] | None
+    ) = None
+
+    if active_category:
+        category_result = (
+            await db.execute(
+                select(
+                    Product.product_id
+                ).where(
+                    func.lower(
+                        Product.category_l1
+                    )
+                    == active_category
+                    .lower()
+                )
+            )
+        )
+
+        category_product_ids = {
+            int(product_id)
+            for product_id
+            in category_result.scalars()
+            .all()
+        }
+
     model = (
         get_recommendation_model()
     )
 
-    inference_started = perf_counter()
+    inference_started = (
+        perf_counter()
+    )
 
     (
         strategy,
         candidates,
     ) = model.recommend(
-        product_weights=product_weights,
+        product_weights=(
+            product_weights
+        ),
         limit=limit,
+        candidate_product_ids=(
+            category_product_ids
+        ),
     )
 
     inference_ms = (
@@ -83,12 +128,15 @@ async def recommendations(
 
     ids = [
         candidate.product_id
-        for candidate in candidates
+        for candidate
+        in candidates
     ]
 
     if ids:
         result = await db.execute(
-            select(Product).where(
+            select(
+                Product
+            ).where(
                 Product.product_id.in_(
                     ids
                 )
@@ -96,14 +144,17 @@ async def recommendations(
         )
 
         products = {
-            product.product_id: product
+            product.product_id:
+                product
             for product
             in result.scalars().all()
         }
     else:
         products = {}
 
-    items = []
+    items: list[
+        RecommendationItem
+    ] = []
 
     for candidate in candidates:
         product = products.get(
@@ -115,9 +166,11 @@ async def recommendations(
 
         items.append(
             RecommendationItem(
-                product=ProductResponse
-                .model_validate(
-                    product
+                product=(
+                    ProductResponse
+                    .model_validate(
+                        product
+                    )
                 ),
                 score=round(
                     candidate.score,
@@ -154,7 +207,9 @@ async def recommendations(
 
 @router.get(
     "/sessions/{session_id}/intent",
-    response_model=SessionIntentResponse,
+    response_model=(
+        SessionIntentResponse
+    ),
 )
 async def session_intent(
     session_id: str,
@@ -163,13 +218,16 @@ async def session_intent(
         session_id
     )
 
-    weights = build_product_weights(
-        events
+    weights = (
+        build_product_weights(
+            events
+        )
     )
 
     strongest = sorted(
         weights.items(),
-        key=lambda item: item[1],
+        key=lambda item:
+            item[1],
         reverse=True,
     )[:10]
 
@@ -182,13 +240,18 @@ async def session_intent(
         event_count=len(events),
         active_product_signals=[
             IntentSignal(
-                product_id=product_id,
+                product_id=(
+                    product_id
+                ),
                 weight=round(
                     weight,
                     4,
                 ),
             )
-            for product_id, weight
+            for (
+                product_id,
+                weight,
+            )
             in strongest
         ],
         model_version=(

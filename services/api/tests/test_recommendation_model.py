@@ -29,7 +29,7 @@ def model():
 def test_model_version(model):
     assert (
         model.MODEL_VERSION
-        == "session-svd-v2"
+        == "session-svd-v3"
     )
 
 

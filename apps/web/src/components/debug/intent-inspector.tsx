@@ -106,7 +106,7 @@ export function IntentInspector({
         <strong>
           {recommendations
             ?.model_version ??
-            "session-svd-v2"}
+            "session-svd-v3"}
         </strong>
       </div>
 

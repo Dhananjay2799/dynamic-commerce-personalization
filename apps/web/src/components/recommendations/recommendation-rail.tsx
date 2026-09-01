@@ -3,6 +3,7 @@
 import {
   ArrowRight,
   Radio,
+  RefreshCw,
 } from "lucide-react";
 
 import {
@@ -25,6 +26,9 @@ type RecommendationRailProps = {
     | undefined;
 
   isLoading: boolean;
+  isError: boolean;
+
+  onRetry: () => void;
 
   onSelect: (
     product: Product
@@ -44,16 +48,28 @@ type RecommendationRailProps = {
 export function RecommendationRail({
   data,
   isLoading,
+  isError,
+  onRetry,
   onSelect,
   onAddToCart,
   onImpression,
 }: RecommendationRailProps) {
+  const hasItems =
+    Boolean(
+      data?.items.length
+    );
+
   return (
     <section
       className="recommendation-section"
       id="recommendations"
     >
-      <div className="section-heading recommendation-heading">
+      <div
+        className="
+          section-heading
+          recommendation-heading
+        "
+      >
         <div>
           <span className="eyebrow">
             01 / PERSONALIZED
@@ -88,9 +104,7 @@ export function RecommendationRail({
               </span>
 
               <span>
-                {
-                  data.inference_ms
-                }
+                {data.inference_ms}
                 {" "}
                 MS
               </span>
@@ -99,13 +113,19 @@ export function RecommendationRail({
         </div>
       </div>
 
-
       <div className="recommendation-note">
         <p>
           {data?.strategy ===
           "session_intent"
-            ? "Adapted from your current browsing behavior."
-            : "Start exploring and this rail will adapt to your behavior."}
+            ? (
+              "Adapted from your "
+              + "current browsing behavior."
+            )
+            : (
+              "Start exploring and "
+              + "this rail will adapt "
+              + "to your behavior."
+            )}
         </p>
 
         <ArrowRight
@@ -114,57 +134,100 @@ export function RecommendationRail({
         />
       </div>
 
-
       <div className="recommendation-track">
-        {isLoading
-          ? Array.from({
-              length: 5,
-            }).map(
-              (_, index) => (
-                <div
-                  className="recommendation-skeleton"
-                  key={index}
-                />
-              )
+        {isLoading ? (
+          Array.from({
+            length: 5,
+          }).map(
+            (_, index) => (
+              <div
+                className="recommendation-skeleton"
+                key={index}
+              />
             )
-          : data?.items.map(
-              (item) => (
-                <div
-                  className="recommendation-item"
-                  key={
+          )
+        ) : isError ? (
+          <div className="recommendation-feedback">
+            <span>
+              RECOMMENDATIONS OFFLINE
+            </span>
+
+            <h3>
+              Personalization could
+              not be loaded.
+            </h3>
+
+            <p>
+              Your shopping experience
+              is still available. Retry
+              the recommendation service
+              when ready.
+            </p>
+
+            <button
+              type="button"
+              onClick={onRetry}
+            >
+              <RefreshCw
+                size={14}
+                strokeWidth={1.5}
+              />
+
+              RETRY
+            </button>
+          </div>
+        ) : !hasItems ? (
+          <div className="recommendation-feedback">
+            <span>
+              NO RECOMMENDATIONS
+            </span>
+
+            <h3>
+              Keep exploring.
+            </h3>
+
+            <p>
+              Interact with products
+              and categories to build
+              your live shopping intent.
+            </p>
+          </div>
+        ) : (
+          data?.items.map(
+            (item) => (
+              <div
+                className="recommendation-item"
+                key={
+                  item.product
+                    .product_id
+                }
+              >
+                <ImpressionTracker
+                  product={
                     item.product
-                      .product_id
+                  }
+                  surface="recommendation_rail"
+                  onImpression={
+                    onImpression
                   }
                 >
-                  <ImpressionTracker
-                    key={
-                      item.product
-                        .product_id
-                    }
+                  <ProductCard
                     product={
                       item.product
                     }
-                    surface="recommendation_rail"
-                    onImpression={
-                      onImpression
+                    personalized
+                    onSelect={
+                      onSelect
                     }
-                  >
-                    <ProductCard
-                      product={
-                        item.product
-                      }
-                      personalized
-                      onSelect={
-                        onSelect
-                      }
-                      onAddToCart={
-                        onAddToCart
-                      }
-                    />
-                  </ImpressionTracker>
-                </div>
-              )
-            )}
+                    onAddToCart={
+                      onAddToCart
+                    }
+                  />
+                </ImpressionTracker>
+              </div>
+            )
+          )
+        )}
       </div>
     </section>
   );

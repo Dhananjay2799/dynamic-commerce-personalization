@@ -20,9 +20,15 @@ MIN_SIGNAL_WEIGHT = 0.05
 def _get_metadata(
     event: dict[str, Any],
 ) -> dict[str, Any]:
-    metadata = event.get("metadata", {})
+    metadata = event.get(
+        "metadata",
+        {},
+    )
 
-    if isinstance(metadata, dict):
+    if isinstance(
+        metadata,
+        dict,
+    ):
         return metadata
 
     return {}
@@ -31,9 +37,13 @@ def _get_metadata(
 def _get_dwell_weight(
     event: dict[str, Any],
 ) -> float:
-    metadata = _get_metadata(event)
+    metadata = _get_metadata(
+        event
+    )
 
-    seconds = metadata.get("seconds")
+    seconds = metadata.get(
+        "seconds"
+    )
 
     if seconds is None:
         milliseconds = metadata.get(
@@ -55,7 +65,9 @@ def _get_dwell_weight(
     try:
         seconds_value = max(
             0.0,
-            float(seconds or 0.0),
+            float(
+                seconds or 0.0
+            ),
         )
     except (
         TypeError,
@@ -73,7 +85,9 @@ def _get_dwell_weight(
 def _get_scroll_weight(
     event: dict[str, Any],
 ) -> float:
-    metadata = _get_metadata(event)
+    metadata = _get_metadata(
+        event
+    )
 
     depth = metadata.get(
         "depth",
@@ -84,7 +98,9 @@ def _get_scroll_weight(
     )
 
     try:
-        depth_value = float(depth)
+        depth_value = float(
+            depth
+        )
     except (
         TypeError,
         ValueError,
@@ -99,7 +115,10 @@ def _get_scroll_weight(
         ),
     )
 
-    return 1.5 * depth_value
+    return (
+        1.5
+        * depth_value
+    )
 
 
 def get_event_signal_weight(
@@ -125,10 +144,63 @@ def get_event_signal_weight(
     ):
         return 0.0
 
-    return BASE_EVENT_WEIGHTS.get(
-        event_type,
-        0.0,
+    return (
+        BASE_EVENT_WEIGHTS.get(
+            event_type,
+            0.0,
+        )
     )
+
+
+def get_active_category(
+    events: list[
+        dict[str, Any]
+    ],
+) -> str | None:
+    """
+    Return the latest explicit category
+    context for the session.
+
+    A category_view event with an empty or
+    null category intentionally clears any
+    previously selected category.
+    """
+
+    for event in reversed(
+        events
+    ):
+        if (
+            event.get(
+                "event_type"
+            )
+            != "category_view"
+        ):
+            continue
+
+        metadata = _get_metadata(
+            event
+        )
+
+        category = metadata.get(
+            "category"
+        )
+
+        if not isinstance(
+            category,
+            str,
+        ):
+            return None
+
+        normalized = (
+            category.strip()
+        )
+
+        return (
+            normalized
+            or None
+        )
+
+    return None
 
 
 def build_product_weights(
@@ -154,10 +226,9 @@ def build_product_weights(
             )
         )
 
-        # Analytics-only signals such
-        # as impressions must not
-        # advance the intent recency
-        # clock.
+        # Analytics-only signals such as
+        # impressions must not advance the
+        # product-intent recency clock.
         if signal_weight == 0.0:
             continue
 

@@ -34,7 +34,7 @@ ml/results/svd-v1-metrics.json
 Local benchmark:
 
 ```text
-Model:              session-svd-v2
+Model:              session-svd-v3
 Strategy:           session_intent
 Warm-up requests:   20
 Measured requests:  500
@@ -43,9 +43,9 @@ Recommendations:    10 per request
 
 | Measurement | Median | p95 | p99 | Maximum |
 |---|---:|---:|---:|---:|
-| Model inference | **1.668 ms** | **2.732 ms** | **3.585 ms** | 4.844 ms |
-| Server total | **13.053 ms** | **21.103 ms** | **26.528 ms** | 32.095 ms |
-| Client-observed HTTP | 22.864 ms | 45.252 ms | 49.967 ms | 62.454 ms |
+| Model inference | **1.705 ms** | **2.809 ms** | **4.198 ms** | 8.072 ms |
+| Server total | **13.205 ms** | **21.653 ms** | **30.478 ms** | 38.393 ms |
+| Client-observed HTTP | **23.448 ms** | **44.355 ms** | **51.572 ms** | 61.394 ms |
 
 The benchmark was executed against the local FastAPI service on a Windows development machine.
 
@@ -60,11 +60,12 @@ benchmark-results/recommendations-local.json
 ### Automated Validation
 
 ```text
-51 automated tests passing
+56 automated tests passing
 
 15  intent-engine tests
 14  recommendation-model tests
 17  telemetry/API contract tests
+ 5  category-context tests
  5  PostgreSQL + Redis integration tests
 ```
 
@@ -449,7 +450,7 @@ The online serving layer adds current-session intent.
 The serving policy is versioned as:
 
 ```text
-session-svd-v2
+session-svd-v3
 ```
 
 The offline SVD metrics are stored under the training artifact version:
@@ -464,7 +465,7 @@ These versions describe different layers:
 svd-v1
     offline latent-factor training/evaluation
 
-session-svd-v2
+session-svd-v3
     online session-aware serving strategy
 ```
 
@@ -831,6 +832,34 @@ total_ms
 
 ---
 
+
+# Category-Aware Session Context
+
+Product interactions and category browsing are modeled as separate but complementary online signals.
+
+Selecting a top-level category emits a `category_view` event with the active `category_l1` value in telemetry metadata.
+
+The `session-svd-v3` serving policy reads the latest explicit category context from Redis-backed session events.
+
+Category context does not alter product-intent weights and does not advance the product-intent recency clock.
+
+Instead, the active category constrains the recommendation candidate pool. The pretrained SVD factors and current session-intent vector still determine ranking order inside that category.
+
+Selecting `All` emits a clearing `category_view` event with `category = null` and `cleared = true`. This removes the category constraint and restores the global session-aware candidate pool.
+
+Live end-to-end validation confirmed:
+
+```text
+category_view persisted to PostgreSQL
+category_view updated Redis session state
+category switching changed recommendation ranking
+returned recommendations matched the selected category
+serving remained in session_intent mode
+clearing category context restored the original SVD ranking
+```
+
+---
+
 # Storefront
 
 The frontend is designed as a polished commerce experience rather than a dashboard placed in front of a recommendation API.
@@ -839,14 +868,22 @@ It includes:
 
 ```text
 responsive product discovery
+top-level category filtering
+server-side search
+paginated catalog browsing
 personalized recommendation rail
 product detail drawer
-server-side search
 session-local cart
 live bag count
 behavioral telemetry
 intent-driven re-ranking
-mobile layouts
+product loading skeletons
+recommendation loading skeletons
+catalog empty state
+recommendation empty state
+catalog error + retry state
+recommendation error + retry state
+responsive desktop and mobile layouts
 ```
 
 For technical review, append:
@@ -1214,7 +1251,7 @@ python -m pytest .\tests -m "not integration" -v
 Current validated result:
 
 ```text
-46 passed
+51 passed
 5 deselected
 ```
 
@@ -1256,7 +1293,7 @@ python -m pytest .\tests -v
 Current validated result:
 
 ```text
-51 passed
+56 passed
 ```
 
 The test suite covers:
@@ -1271,6 +1308,9 @@ recency behavior
 zero-weight impression handling
 dwell-time bounds
 scroll-depth bounds
+category-context selection and replacement
+category-context clearing
+category-constrained candidate ranking
 cold-start ranking
 personalized ranking
 candidate uniqueness
@@ -1337,7 +1377,7 @@ The benchmark:
 creates a fresh session
 writes an add_to_cart event
 verifies session_intent mode
-measures the first recommendation request
+measures the first request in the measured benchmark sequence
 executes 20 warm-up requests
 executes 500 measured requests
 calculates median, p95, and p99 latency
@@ -1579,7 +1619,19 @@ session_intent
 
 and recommendations should respond to current-session behavior.
 
-### 7. Review ML evidence
+### 7. Switch category context
+
+Select a top-level category such as ppliances.
+
+The recommendation strategy should remain session_intent, while returned recommendations adapt to products in the active category.
+
+### 8. Clear category context
+
+Select All.
+
+The storefront emits a category-context clearing event and the recommendation service returns to the global session-aware candidate pool.
+
+### 9. Review ML evidence
 
 Inspect:
 
@@ -1587,7 +1639,7 @@ Inspect:
 ml/results/svd-v1-metrics.json
 ```
 
-### 8. Review serving benchmark
+### 10. Review serving benchmark
 
 Inspect:
 
@@ -1595,7 +1647,7 @@ Inspect:
 benchmark-results/recommendations-local.json
 ```
 
-### 9. Run automated tests
+### 11. Run automated tests
 
 ```powershell
 cd .\services\api
@@ -1605,7 +1657,7 @@ python -m pytest .\tests -v
 Expected:
 
 ```text
-51 passed
+56 passed
 ```
 
 ---

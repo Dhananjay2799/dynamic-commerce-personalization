@@ -261,7 +261,7 @@ def test_real_recommendation_pipeline(
 
     assert (
         data["model_version"]
-        == "session-svd-v2"
+        == "session-svd-v3"
     )
 
     assert (

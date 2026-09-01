@@ -14,6 +14,10 @@ import {
 } from "lucide-react";
 
 import {
+  PaginationControls,
+} from "@/components/commerce/pagination-controls";
+
+import {
   CategoryNav,
 } from "@/components/commerce/category-nav";
 
@@ -120,6 +124,11 @@ export default function Home() {
   ] = useState("");
 
   const [
+    productPage,
+    setProductPage,
+  ] = useState(1);
+
+  const [
     lastSignal,
     setLastSignal,
   ] = useState<
@@ -218,7 +227,8 @@ export default function Home() {
   const productsQuery =
     useProducts(
       selectedCategory,
-      searchQuery
+      searchQuery,
+      productPage
     );
 
   const categoriesQuery =
@@ -264,6 +274,7 @@ export default function Home() {
 
     if (!normalizedQuery) {
       setSearchQuery("");
+      setProductPage(1);
 
       return;
     }
@@ -271,6 +282,8 @@ export default function Home() {
     setSearchInput(
       normalizedQuery
     );
+
+    setProductPage(1);
 
     setSearchQuery(
       normalizedQuery
@@ -306,6 +319,7 @@ export default function Home() {
   function handleClearSearch() {
     setSearchInput("");
     setSearchQuery("");
+    setProductPage(1);
 
     setLastSignal(
       "Search cleared"
@@ -498,16 +512,22 @@ export default function Home() {
       category
     );
 
-    if (!category) {
-      return;
-    }
+    setProductPage(1);
 
     const categoryRecord =
-      categories.find(
-        (item) =>
-          item.category_l1 ===
-          category
-      );
+      category
+        ? categories.find(
+            (item) =>
+              item.category_l1 ===
+              category
+          )
+        : undefined;
+
+    setLastSignal(
+      category
+        ? `Category intent: ${category}`
+        : "Category intent cleared"
+    );
 
     await trackEvent({
       event_type:
@@ -518,9 +538,40 @@ export default function Home() {
           ?.category_id,
 
       metadata: {
-        category,
+        category:
+          category || null,
+
+        cleared:
+          !category,
+
+        surface:
+          "category_filter",
       },
     });
+  }
+
+  function handlePageChange(
+    page: number
+  ) {
+    setProductPage(
+      page
+    );
+
+    window.requestAnimationFrame(
+      () => {
+        document
+          .getElementById(
+            "explore"
+          )
+          ?.scrollIntoView({
+            behavior:
+              "smooth",
+
+            block:
+              "start",
+          });
+      }
+    );
   }
 
   return (
@@ -635,7 +686,7 @@ export default function Home() {
             </span>
 
             <strong>
-              session-svd-v2
+              session-svd-v3
             </strong>
           </div>
         </div>
@@ -649,6 +700,14 @@ export default function Home() {
           recommendationsQuery
             .isLoading
         }
+        isError={
+          recommendationsQuery
+            .isError
+        }
+        onRetry={() => {
+          void recommendationsQuery
+            .refetch();
+        }}
         onSelect={
           handleProductSelect
         }
@@ -750,21 +809,72 @@ export default function Home() {
           }
         />
 
-        <ProductGrid
-          products={products}
-          isLoading={
-            productsQuery.isLoading
-          }
-          onSelect={
-            handleProductSelect
-          }
-          onAddToCart={
-            handleAddToCart
-          }
-          onImpression={
-            handleProductImpression
-          }
-        />
+        {productsQuery.isError ? (
+          <div className="catalog-error-state">
+            <span>
+              CATALOG UNAVAILABLE
+            </span>
+
+            <h3>
+              We could not load
+              this collection.
+            </h3>
+
+            <p>
+              The storefront is still
+              active. Retry the catalog
+              request to continue browsing.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => {
+                void productsQuery
+                  .refetch();
+              }}
+            >
+              RETRY CATALOG
+            </button>
+          </div>
+        ) : (
+          <>
+            <ProductGrid
+              products={products}
+              isLoading={
+                productsQuery.isLoading
+              }
+              onSelect={
+                handleProductSelect
+              }
+              onAddToCart={
+                handleAddToCart
+              }
+              onImpression={
+                handleProductImpression
+              }
+            />
+
+            <PaginationControls
+              page={
+                productsQuery.data
+                  ?.page
+                ?? productPage
+              }
+              totalPages={
+                productsQuery.data
+                  ?.total_pages
+                ?? 0
+              }
+              isFetching={
+                productsQuery
+                  .isFetching
+              }
+              onPageChange={
+                handlePageChange
+              }
+            />
+          </>
+        )}
       </section>
 
       <footer className="site-footer">

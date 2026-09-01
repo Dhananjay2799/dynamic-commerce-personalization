@@ -12,18 +12,20 @@ import {
 
 export function useProducts(
   category?: string,
-  search?: string
+  search?: string,
+  page = 1
 ) {
   return useQuery({
     queryKey: [
       "products",
       category ?? "all",
       search ?? "",
+      page,
     ],
 
     queryFn: () =>
       getProducts({
-        page: 1,
+        page,
         pageSize: 24,
 
         category:
@@ -34,8 +36,7 @@ export function useProducts(
           search
           || undefined,
 
-        sort:
-          "popular",
+        sort: "popular",
       }),
   });
 }

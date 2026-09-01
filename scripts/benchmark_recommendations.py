@@ -545,7 +545,7 @@ def main() -> None:
                 4.0,
         },
 
-        "first_request_after_api_restart": {
+        "first_measured_request": {
             "inference_ms":
                 round(
                     float(
@@ -617,7 +617,7 @@ def main() -> None:
     print(
         json.dumps(
             result[
-                "first_request_after_api_restart"
+                "first_measured_request"
             ],
             indent=2,
         )
