@@ -1,0 +1,50 @@
+{
+  "benchmark": "recommendation_api_local",
+  "captured_at_utc": "2026-09-01T15:21:50.033141+00:00",
+  "base_url": "http://127.0.0.1:8000",
+  "session_id": "benchmark-737f1f74-50d6-4e0a-bb76-8d08aa062a83",
+  "model_version": "session-svd-v2",
+  "strategy": "session_intent",
+  "recommendation_limit": 10,
+  "warmup_requests": 20,
+  "measured_requests": 500,
+  "seed_event": {
+    "event_type": "add_to_cart",
+    "product_id": 4804056,
+    "weight": 4.0
+  },
+  "first_request_after_api_restart": {
+    "inference_ms": 1.994,
+    "total_ms": 58.642,
+    "client_wall_ms": 66.911
+  },
+  "warm_measurements": {
+    "model_inference": {
+      "count": 500,
+      "min_ms": 0.817,
+      "mean_ms": 1.723,
+      "median_ms": 1.668,
+      "p95_ms": 2.732,
+      "p99_ms": 3.585,
+      "max_ms": 4.844
+    },
+    "server_total": {
+      "count": 500,
+      "min_ms": 5.906,
+      "mean_ms": 13.24,
+      "median_ms": 13.053,
+      "p95_ms": 21.103,
+      "p99_ms": 26.528,
+      "max_ms": 32.095
+    },
+    "client_wall": {
+      "count": 500,
+      "min_ms": 8.589,
+      "mean_ms": 25.632,
+      "median_ms": 22.864,
+      "p95_ms": 45.252,
+      "p99_ms": 49.967,
+      "max_ms": 62.454
+    }
+  }
+}
