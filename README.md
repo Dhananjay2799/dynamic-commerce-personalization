@@ -60,13 +60,14 @@ benchmark-results/recommendations-local.json
 ### Automated Validation
 
 ```text
-56 automated tests passing
+61 automated tests passing
 
 15  intent-engine tests
 14  recommendation-model tests
 17  telemetry/API contract tests
  5  category-context tests
- 5  PostgreSQL + Redis integration tests
+ 5  catalog API integration tests
+ 5  PostgreSQL + Redis runtime integration tests
 ```
 
 The integration suite exercises the real Docker-backed PostgreSQL and Redis services.
@@ -726,6 +727,31 @@ For a production system, analytics-only events and online feature-state events w
 
 ---
 
+# Catalog and Inventory APIs
+
+The backend exposes paginated catalog resources for products, categories, and inventory.
+
+```text
+GET /api/v1/products?page=1&page_size=24
+GET /api/v1/categories?page=1&page_size=50
+GET /api/v1/inventory?page=1&page_size=24
+```
+
+Inventory can also be filtered by category or low-stock status:
+
+```text
+GET /api/v1/inventory?category=electronics
+GET /api/v1/inventory?low_stock=true&low_stock_threshold=25
+```
+
+All three paginated resources return page metadata including `page`, `page_size`, `total`, and `total_pages`.
+
+The inventory API reads the existing PostgreSQL product inventory field rather than maintaining a second inventory source of truth.
+
+Automated integration coverage verifies category pagination, non-overlapping pages, inventory pagination, category filtering, and low-stock filtering.
+
+---
+
 # Search
 
 The product API supports server-side search.
@@ -1252,7 +1278,7 @@ Current validated result:
 
 ```text
 51 passed
-5 deselected
+10 deselected
 ```
 
 ## Real infrastructure integration tests
@@ -1273,15 +1299,16 @@ run:
 
 ```powershell
 python -m pytest `
+  .\tests `
   -m integration `
-  .\tests\test_runtime_integration.py `
   -v
 ```
 
 Current validated result:
 
 ```text
-5 passed
+10 passed
+51 deselected
 ```
 
 ## Full backend suite
@@ -1293,7 +1320,7 @@ python -m pytest .\tests -v
 Current validated result:
 
 ```text
-56 passed
+61 passed
 ```
 
 The test suite covers:
@@ -1311,6 +1338,11 @@ scroll-depth bounds
 category-context selection and replacement
 category-context clearing
 category-constrained candidate ranking
+category pagination
+category page separation
+inventory pagination
+inventory low-stock filtering
+inventory category filtering
 cold-start ranking
 personalized ranking
 candidate uniqueness
@@ -1657,7 +1689,7 @@ python -m pytest .\tests -v
 Expected:
 
 ```text
-56 passed
+61 passed
 ```
 
 ---

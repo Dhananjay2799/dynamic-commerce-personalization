@@ -6,11 +6,19 @@ import type {
   TelemetryEvent,
 } from "@/types/commerce";
 
-
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ??
   "http://127.0.0.1:8000";
 
+type CategoryListResponse = {
+  items: Category[];
+
+  page: number;
+  page_size: number;
+
+  total: number;
+  total_pages: number;
+};
 
 async function apiFetch<T>(
   path: string,
@@ -36,7 +44,6 @@ async function apiFetch<T>(
 
   return response.json();
 }
-
 
 export async function getProducts(
   params?: {
@@ -90,14 +97,42 @@ export async function getProducts(
   );
 }
 
+export async function getCategories(): Promise<Category[]> {
+  const pageSize = 100;
 
-export async function getCategories():
-Promise<Category[]> {
-  return apiFetch(
-    "/api/v1/categories"
-  );
+  const firstPage =
+    await apiFetch<CategoryListResponse>(
+      `/api/v1/categories?page=1&page_size=${pageSize}`
+    );
+
+  if (
+    firstPage.total_pages <= 1
+  ) {
+    return firstPage.items;
+  }
+
+  const remainingPages =
+    await Promise.all(
+      Array.from(
+        {
+          length:
+            firstPage.total_pages - 1,
+        },
+        (_, index) =>
+          apiFetch<CategoryListResponse>(
+            `/api/v1/categories?page=${index + 2}&page_size=${pageSize}`
+          )
+      )
+    );
+
+  return [
+    ...firstPage.items,
+    ...remainingPages.flatMap(
+      (page) =>
+        page.items
+    ),
+  ];
 }
-
 
 export async function sendEvent(
   event: TelemetryEvent
@@ -113,7 +148,6 @@ export async function sendEvent(
   );
 }
 
-
 export async function getRecommendations(
   sessionId: string,
   limit = 12
@@ -128,7 +162,6 @@ export async function getRecommendations(
     `/api/v1/recommendations?${search.toString()}`
   );
 }
-
 
 export async function getSessionIntent(
   sessionId: string

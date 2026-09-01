@@ -4,35 +4,32 @@ from pydantic import (
 )
 
 
-class CategoryResponse(
+class InventoryItemResponse(
     BaseModel
 ):
     model_config = ConfigDict(
         from_attributes=True
     )
 
+    product_id: int
     category_id: int
+
+    name: str
 
     category_code: str | None
     category_l1: str | None
     category_leaf: str | None
 
-    total_events: int
-    views: int
-    carts: int
-    purchases: int
+    brand: str | None
 
-    unique_products: int
-    unique_users: int
-
-    view_to_purchase_rate: float
+    inventory_quantity: int
 
 
-class CategoryListResponse(
+class InventoryListResponse(
     BaseModel
 ):
     items: list[
-        CategoryResponse
+        InventoryItemResponse
     ]
 
     page: int
